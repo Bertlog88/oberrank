@@ -55,14 +55,15 @@ async def on_message(message):
     if message.content.startswith("!setrank"):
         parts = message.content.split(" ")
         if len(parts) == 3:
-            account = parts[1]
+            account = parts[1].lower()  # Ensure case-insensitive matching
             rank = parts[2]
+            print(f"Received account: '{account}', rank: '{rank}'")  # Debug output
             if account in ranks:
                 ranks[account] = rank
                 await message.channel.send(f"{account} rank updated to {rank}.")
                 await update_rank_message(message.channel)
             else:
-                await message.channel.send(f"Account {account} not found.")
+                await message.channel.send(f"Account {account} not found. Current accounts: {list(ranks.keys())}")  # Debug output
         else:
             await message.channel.send("Usage: !setrank <account> <rank>")
 
