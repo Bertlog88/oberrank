@@ -1,73 +1,76 @@
-import discord
-from discord.ext import commands
-import json
 import os
+import discord
 
 intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+intents.message_content = True  # Ensure the bot can read messages
 
-DATA_FILE = 'user_accounts.json'
-if os.path.exists(DATA_FILE):
-    with open(DATA_FILE, 'r') as f:
-        user_data = json.load(f)
-else:
-    user_data = {}
+# Create the bot instance with the necessary intents
+bot = discord.Client(intents=intents)
 
-VALID_RANKS = ['bronze', 'silver', 'gold', 'plat', 'diamond', 'master', 'gm', 'top500']
+# Access the Discord bot token from the environment variable
+TOKEN = os.getenv('DISCORD_TOKEN')
 
-def save_data():
-    with open(DATA_FILE, 'w') as f:
-        json.dump(user_data, f, indent=2)
+# Ensure that the token was retrieved
+if not TOKEN:
+    raise ValueError("No token found! Please set the DISCORD_TOKEN environment variable.")
 
-def generate_message(accounts: dict) -> str:
-    if not accounts:
-        return "No ranks set yet."
-    lines = [f"**{name}:** {rank.upper()}" for name, rank in accounts.items()]
-    return "\n".join(lines)
+# Define some ranks (example)
+ranks = {
+    "account1": "gm3",
+    "account2": "gm5",
+    "account3": "master"
+}
 
-@bot.command()
-async def setrank(ctx, account: str, rank: str):
-    rank = rank.lower()
-    account = account.strip()
-    if rank not in VALID_RANKS:
-        await ctx.send(f"Invalid rank. Valid ranks: {', '.join(VALID_RANKS)}")
+# Command to update rank
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
         return
 
-    user_id = str(ctx.author.id)
-    if user_id not in user_data:
-        user_data[user_id] = {"accounts": {}, "message_id": None, "channel_id": None}
+    # Command to set the rank
+    if message.content.startswith("!setrank"):
+        parts = message.content.split(" ")
+        if len(parts) == 3:
+            account = parts[1]
+            rank = parts[2]
+            if account in ranks:
+                ranks[account] = rank
+                await message.channel.send(f"{account} rank updated to {rank}.")
+                await update_rank_message(message)
+            else:
+                await message.channel.send(f"Account {account} not found.")
+        else:
+            await message.channel.send("Invalid command format. Use: !setrank <account> <rank>")
+
+    # Command to view ranks
+    if message.content == "!viewranks":
+        await view_ranks(message)
+
+# Function to view ranks
+async def view_ranks(message):
+    rank_list = "\n".join([f"{account}: {rank}" for account, rank in ranks.items()])
+    await message.channel.send(f"Current ranks:\n{rank_list}")
+
+# Function to update the rank message
+async def update_rank_message(message):
+    channel = message.channel
+    rank_message = "\n".join([f"{account}: {rank}" for account, rank in ranks.items()])
     
-    user_data[user_id]["accounts"][account] = rank
-    save_data()
+    # Search for the existing message (if any)
+    async for msg in channel.history(limit=100):
+        if msg.author == bot.user and msg.content.startswith("Current ranks:"):
+            # Edit the existing message if found
+            await msg.edit(content=f"Current ranks:\n{rank_message}")
+            return
 
-    try:
-        channel_id = user_data[user_id]["channel_id"]
-        message_id = user_data[user_id]["message_id"]
-        channel = bot.get_channel(channel_id) or await ctx.guild.fetch_channel(channel_id)
-        msg = await channel.fetch_message(message_id)
-        await msg.edit(content=generate_message(user_data[user_id]["accounts"]))
-        await ctx.send("Rank updated.")
-        return
-    except Exception as e:
-        pass  # Message might not exist
+    # If no message was found, send a new one
+    await channel.send(f"Current ranks:\n{rank_message}")
 
-    # Send a new message if previous one isn't found
-    content = generate_message(user_data[user_id]["accounts"])
-    new_msg = await ctx.send(content)
-    user_data[user_id]["message_id"] = new_msg.id
-    user_data[user_id]["channel_id"] = new_msg.channel.id
-    save_data()
-    await ctx.send("Rank message created.")
+# Event when the bot is ready
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user}')
+    print('Bot is ready to receive commands.')
 
-@bot.command()
-async def viewranks(ctx):
-    user_id = str(ctx.author.id)
-    if user_id not in user_data or not user_data[user_id]["accounts"]:
-        await ctx.send("You haven’t set any ranks yet.")
-        return
-    content = generate_message(user_data[user_id]["accounts"])
-    await ctx.send(content)
-
-# ✅ Start the bot (replace the token below with your actual bot token)
-bot.run("MTM3MDA0NjMwNzM2ODA0MjUxMA.GD8LbP.zyr35qYeYuWU60EOCoJwE8Z0XDU5jq0_krtbpE")
+# Run the bot with the token from the environment variable
+bot.run(TOKEN)
