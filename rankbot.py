@@ -42,6 +42,20 @@ async def on_message(message):
         else:
             await message.channel.send("Invalid command format. Use: !setrank <account> <rank>")
 
+    # Command to delete the rank
+    if message.content.startswith("!deleterank"):
+        parts = message.content.split(" ")
+        if len(parts) == 2:
+            account = parts[1]
+            if account in ranks:
+                del ranks[account]  # Delete the account's rank
+                await message.channel.send(f"{account}'s rank has been deleted.")
+                await update_rank_message(message)
+            else:
+                await message.channel.send(f"Account {account} not found.")
+        else:
+            await message.channel.send("Invalid command format. Use: !deleterank <account>")
+
     # Command to view ranks
     if message.content == "!viewranks":
         await view_ranks(message)
