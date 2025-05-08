@@ -28,23 +28,26 @@ async def update_rank_message(channel):
             try:
                 message_id = int(f.read().strip())
             except ValueError:
-                pass
+                print("Could not read message ID from file.")
+                message_id = None
 
-    # Try to edit the existing message
+    # Try to edit existing message
     if message_id:
         try:
             msg = await channel.fetch_message(message_id)
             await msg.edit(content=content)
+            print(f"Edited message ID {message_id}")
             return
         except discord.NotFound:
-            pass  # message no longer exists
-        except discord.HTTPException:
-            pass  # failed to edit message for another reason
+            print("Stored message ID not found. Will send new message.")
+        except discord.HTTPException as e:
+            print(f"HTTP error while editing message: {e}")
 
-    # If no message found, send a new one and store its ID
+    # Send a new message if we can't edit the old one
     new_msg = await channel.send(content)
     with open(RANK_MSG_FILE, "w") as f:
         f.write(str(new_msg.id))
+    print(f"Sent new message with ID {new_msg.id}")
 
 @bot.event
 async def on_message(message):
