@@ -31,7 +31,6 @@ async def update_rank_message(channel):
                 print("Could not read message ID from file.")
                 message_id = None
 
-    # Try to edit existing message
     if message_id:
         try:
             msg = await channel.fetch_message(message_id)
@@ -43,7 +42,6 @@ async def update_rank_message(channel):
         except discord.HTTPException as e:
             print(f"HTTP error while editing message: {e}")
 
-    # Send a new message if we can't edit the old one
     new_msg = await channel.send(content)
     with open(RANK_MSG_FILE, "w") as f:
         f.write(str(new_msg.id))
@@ -86,6 +84,8 @@ async def on_message(message):
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
+    if not hasattr(bot, 'started'):
+        bot.started = True
+        print(f"Logged in as {bot.user}")
 
 bot.run(TOKEN)
