@@ -13,7 +13,8 @@ if not TOKEN:
 ranks = {
     "account1": "gm3",
     "account2": "gm5",
-    "account3": "master"
+    "account3": "master",
+    "succubus": "unranked"  # Add succubus account here with a default rank
 }
 
 RANK_MSG_FILE = "rank_message_id.txt"
@@ -52,6 +53,7 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    # !setrank command
     if message.content.startswith("!setrank"):
         parts = message.content.split(" ")
         if len(parts) == 3:
@@ -67,6 +69,7 @@ async def on_message(message):
         else:
             await message.channel.send("Usage: !setrank <account> <rank>")
 
+    # !deleterank command
     if message.content.startswith("!deleterank"):
         parts = message.content.split(" ")
         if len(parts) == 2:
@@ -80,8 +83,24 @@ async def on_message(message):
         else:
             await message.channel.send("Usage: !deleterank <account>")
 
+    # !viewranks command
     if message.content == "!viewranks":
         await update_rank_message(message.channel)
+
+    # !add command (adds a new account)
+    if message.content.startswith("!add"):
+        parts = message.content.split(" ")
+        if len(parts) == 3:
+            account = parts[1].lower()  # Ensure case-insensitive matching
+            rank = parts[2]
+            if account in ranks:
+                await message.channel.send(f"Account {account} already exists with rank {ranks[account]}.")
+            else:
+                ranks[account] = rank
+                await message.channel.send(f"Account {account} added with rank {rank}.")
+                await update_rank_message(message.channel)
+        else:
+            await message.channel.send("Usage: !add <account> <rank>")
 
 @bot.event
 async def on_ready():
