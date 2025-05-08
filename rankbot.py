@@ -1,33 +1,56 @@
 import os
 import discord
+import asyncio
 
 intents = discord.Intents.default()
-intents.message_content = True  # Ensure the bot can read messages
-
-# Create the bot instance with the necessary intents
+intents.message_content = True
 bot = discord.Client(intents=intents)
 
-# Access the Discord bot token from the environment variable
 TOKEN = os.getenv('DISCORD_TOKEN')
-
-# Ensure that the token was retrieved
 if not TOKEN:
-    raise ValueError("No token found! Please set the DISCORD_TOKEN environment variable.")
+    raise ValueError("DISCORD_TOKEN environment variable not set.")
 
-# Define some ranks (example)
 ranks = {
     "account1": "gm3",
     "account2": "gm5",
     "account3": "master"
 }
 
-# Command to update rank
+RANK_MSG_FILE = "rank_message_id.txt"
+
+async def update_rank_message(channel):
+    rank_text = "\n".join([f"{account}: {rank}" for account, rank in ranks.items()])
+    content = f"Current ranks:\n{rank_text}"
+
+    message_id = None
+    if os.path.exists(RANK_MSG_FILE):
+        with open(RANK_MSG_FILE, "r") as f:
+            try:
+                message_id = int(f.read().strip())
+            except ValueError:
+                pass
+
+    # Try to edit the existing message
+    if message_id:
+        try:
+            msg = await channel.fetch_message(message_id)
+            await msg.edit(content=content)
+            return
+        except discord.NotFound:
+            pass  # message no longer exists
+        except discord.HTTPException:
+            pass  # failed to edit message for another reason
+
+    # If no message found, send a new one and store its ID
+    new_msg = await channel.send(content)
+    with open(RANK_MSG_FILE, "w") as f:
+        f.write(str(new_msg.id))
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
 
-    # Command to set the rank
     if message.content.startswith("!setrank"):
         parts = message.content.split(" ")
         if len(parts) == 3:
@@ -36,59 +59,30 @@ async def on_message(message):
             if account in ranks:
                 ranks[account] = rank
                 await message.channel.send(f"{account} rank updated to {rank}.")
-                await update_rank_message(message)
+                await update_rank_message(message.channel)
             else:
                 await message.channel.send(f"Account {account} not found.")
         else:
-            await message.channel.send("Invalid command format. Use: !setrank <account> <rank>")
+            await message.channel.send("Usage: !setrank <account> <rank>")
 
-    # Command to delete the rank
     if message.content.startswith("!deleterank"):
         parts = message.content.split(" ")
         if len(parts) == 2:
             account = parts[1]
             if account in ranks:
-                del ranks[account]  # Delete the account's rank
-                await message.channel.send(f"{account}'s rank has been deleted.")
-                await update_rank_message(message)
+                del ranks[account]
+                await message.channel.send(f"{account}'s rank deleted.")
+                await update_rank_message(message.channel)
             else:
                 await message.channel.send(f"Account {account} not found.")
         else:
-            await message.channel.send("Invalid command format. Use: !deleterank <account>")
+            await message.channel.send("Usage: !deleterank <account>")
 
-    # Command to view ranks
     if message.content == "!viewranks":
-        await view_ranks(message)
+        await update_rank_message(message.channel)
 
-# Function to view ranks
-async def view_ranks(message):
-    rank_list = "\n".join([f"{account}: {rank}" for account, rank in ranks.items()])
-    await message.channel.send(f"Current ranks:\n{rank_list}")
-
-# Function to update the rank message
-async def update_rank_message(message):
-    channel = message.channel
-    rank_message = "\n".join([f"{account}: {rank}" for account, rank in ranks.items()])
-    
-    # Search for the existing "Current ranks" message in the channel
-    existing_message = None
-    async for msg in channel.history(limit=100):
-        if msg.author == bot.user and msg.content.startswith("Current ranks:"):
-            existing_message = msg
-            break  # Stop searching once we find the message
-
-    if existing_message:
-        # If an existing "Current ranks" message is found, edit it
-        await existing_message.edit(content=f"Current ranks:\n{rank_message}")
-    else:
-        # If no such message exists, send a new one
-        await channel.send(f"Current ranks:\n{rank_message}")
-
-# Event when the bot is ready
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user}')
-    print('Bot is ready to receive commands.')
+    print(f"Logged in as {bot.user}")
 
-# Run the bot with the token from the environment variable
 bot.run(TOKEN)
