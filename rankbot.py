@@ -70,14 +70,14 @@ async def update_rank_message(message):
     channel = message.channel
     rank_message = "\n".join([f"{account}: {rank}" for account, rank in ranks.items()])
     
-    # Search for the existing "Current ranks" message
+    # Search for the existing "Current ranks" message in the channel
     async for msg in channel.history(limit=100):
         if msg.author == bot.user and msg.content.startswith("Current ranks:"):
             # If found, edit the existing message
             await msg.edit(content=f"Current ranks:\n{rank_message}")
-            return
+            return  # Exit after editing the message
 
-    # If no message found, send a new one
+    # If no "Current ranks" message was found, send a new one
     await channel.send(f"Current ranks:\n{rank_message}")
 
 # Event when the bot is ready
