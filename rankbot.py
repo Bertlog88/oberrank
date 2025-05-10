@@ -1,116 +1,111 @@
-import os
-import json
 import discord
+from discord.ext import commands
+import json
+import os
 
+TOKEN = os.getenv("DISCORD_TOKEN")
 intents = discord.Intents.default()
 intents.message_content = True
-bot = discord.Client(intents=intents)
-
-TOKEN = os.getenv('DISCORD_TOKEN')
-if not TOKEN:
-    raise ValueError("DISCORD_TOKEN environment variable not set.")
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 RANKS_FILE = "ranks.json"
-RANK_MSG_FILE = "rank_message_id.txt"
+MESSAGE_ID_FILE = "rank_message_id.txt"
 
-# Load ranks from file
-def load_ranks():
-    if os.path.exists(RANKS_FILE):
-        with open(RANKS_FILE, "r") as f:
-            return json.load(f)
-    return {}
+VALID_RANKS = [
+    f"{tier} {i}" for tier in [
+        "bronze", "silver", "gold", "platinum", "diamond", "master", "grandmaster"
+    ] for i in range(1, 6)
+]
 
-# Save ranks to file
+ranks = {}
+
+if os.path.exists(RANKS_FILE):
+    with open(RANKS_FILE, "r") as f:
+        ranks = json.load(f)
+
 def save_ranks():
     with open(RANKS_FILE, "w") as f:
-        json.dump(ranks, f, indent=2)
+        json.dump(ranks, f)
 
-ranks = load_ranks()
+def get_rank_message():
+    if not ranks:
+        return "Current ranks: (none set)"
+    return "Current ranks:\n" + "\n".join(f"{account}: {rank}" for account, rank in ranks.items())
 
 async def update_rank_message(channel):
-    rank_text = "\n".join([f"{account}: {rank}" for account, rank in ranks.items()])
-    content = f"Current ranks:\n{rank_text}" if rank_text else "Current ranks:\n(No accounts yet)"
-
     message_id = None
-    if os.path.exists(RANK_MSG_FILE):
-        with open(RANK_MSG_FILE, "r") as f:
+    if os.path.exists(MESSAGE_ID_FILE):
+        with open(MESSAGE_ID_FILE, "r") as f:
             try:
                 message_id = int(f.read().strip())
             except ValueError:
-                message_id = None
+                pass
+
+    content = get_rank_message()
 
     if message_id:
         try:
-            msg = await channel.fetch_message(message_id)
-            await msg.edit(content=content)
+            message = await channel.fetch_message(message_id)
+            await message.edit(content=content)
             return
         except discord.NotFound:
             pass
 
-    new_msg = await channel.send(content)
-    with open(RANK_MSG_FILE, "w") as f:
-        f.write(str(new_msg.id))
-
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
-
-    # !setrank <account> <rank>
-    if message.content.startswith("!setrank"):
-        parts = message.content.split(" ")
-        if len(parts) == 3:
-            account = parts[1].lower()
-            rank = parts[2]
-            if account in ranks:
-                ranks[account] = rank
-                save_ranks()
-                await message.channel.send(f"{account} rank updated to {rank}.")
-                await update_rank_message(message.channel)
-            else:
-                await message.channel.send(f"Account {account} not found.")
-        else:
-            await message.channel.send("Usage: !setrank <account> <rank>")
-
-    # !deleterank <account>
-    if message.content.startswith("!deleterank"):
-        parts = message.content.split(" ")
-        if len(parts) == 2:
-            account = parts[1].lower()
-            if account in ranks:
-                del ranks[account]
-                save_ranks()
-                await message.channel.send(f"{account}'s rank deleted.")
-                await update_rank_message(message.channel)
-            else:
-                await message.channel.send(f"Account {account} not found.")
-        else:
-            await message.channel.send("Usage: !deleterank <account>")
-
-    # !viewranks
-    if message.content == "!viewranks":
-        await update_rank_message(message.channel)
-
-    # !add <account> <rank>
-    if message.content.startswith("!add"):
-        parts = message.content.split(" ")
-        if len(parts) == 3:
-            account = parts[1].lower()
-            rank = parts[2]
-            if account in ranks:
-                await message.channel.send(f"Account {account} already exists with rank {ranks[account]}.")
-            else:
-                ranks[account] = rank
-                save_ranks()
-                await message.channel.send(f"Account {account} added with rank {rank}.")
-                await update_rank_message(message.channel)
-        else:
-            await message.channel.send("Usage: !add <account> <rank>")
+    msg = await channel.send(content)
+    with open(MESSAGE_ID_FILE, "w") as f:
+        f.write(str(msg.id))
 
 @bot.event
 async def on_ready():
-    if not hasattr(bot, 'started'):
-        bot.started = True
-        print(f"Logged in as {bot.user}")
+    print(f'Logged in as {bot.user.name}')
+    for guild in bot.guilds:
+        for channel in guild.text_channels:
+            try:
+                await update_rank_message(channel)
+                break
+            except discord.Forbidden:
+                continue
+
+@bot.command()
+async def setrank(ctx, account: str, *, rank: str):
+    rank = rank.lower()
+    if rank not in VALID_RANKS:
+        await ctx.send(f"Invalid rank. Valid ranks are: {', '.join(VALID_RANKS)}")
+        return
+
+    if account not in ranks:
+        await ctx.send(f"Account '{account}' not found. Use `!add {account} {rank}` to add it.")
+        return
+
+    ranks[account] = rank
+    save_ranks()
+    await update_rank_message(ctx.channel)
+    await ctx.send(f"Updated rank for {account} to {rank}.")
+
+@bot.command()
+async def add(ctx, account: str, *, rank: str):
+    rank = rank.lower()
+    if rank not in VALID_RANKS:
+        await ctx.send(f"Invalid rank. Valid ranks are: {', '.join(VALID_RANKS)}")
+        return
+
+    ranks[account] = rank
+    save_ranks()
+    await update_rank_message(ctx.channel)
+    await ctx.send(f"Added {account} with rank {rank}.")
+
+@bot.command()
+async def deleterank(ctx, account: str):
+    if account in ranks:
+        del ranks[account]
+        save_ranks()
+        await update_rank_message(ctx.channel)
+        await ctx.send(f"Deleted rank for {account}.")
+    else:
+        await ctx.send(f"Account '{account}' not found.")
+
+@bot.command()
+async def rank(ctx):
+    await ctx.send(get_rank_message())
 
 bot.run(TOKEN)
