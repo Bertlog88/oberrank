@@ -172,6 +172,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+ranks.json
 
 # Do not track the bot's message ID file
 rank_message_id.txt
